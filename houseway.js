@@ -256,13 +256,82 @@
     'Two Aces and a Joker with a Straight or Flush'
   ]);
 
-  function dealException(rnd = Math.random) {
+  const SF_TWO_PAIR = 'Straight/Flush with Two Pair';
+  const SF_ACE_EXCEPTION = 'Straight/Flush with One Pair (Ace + big pair exception)';
+  const TRIPS_ACES = 'Three of a Kind (Aces)';
+  const TRIPS_OTHER = 'Three of a Kind (Kings and below)';
+  const FIXED_SHARE = new Set([SF_TWO_PAIR, SF_ACE_EXCEPTION, TRIPS_ACES, TRIPS_OTHER]);
+  const QUADS_TIERS = [
+    { name: 'Four of a Kind (Aces–Jacks)', min: 11, max: 14 },
+    { name: 'Four of a Kind (10s–7s)', min: 7, max: 10 },
+    { name: 'Four of a Kind (6s and below)', min: 2, max: 6 }
+  ];
+  QUADS_TIERS.forEach(t => FIXED_SHARE.add(t.name));
+  FIXED_SHARE.add('Five Aces');
+  FIXED_SHARE.add('Two Aces and a Joker with a Straight or Flush');
+
+  // Quads are too rare to find by rejection sampling, so build the hand directly.
+  function dealQuads(rnd, tier) {
+    for (;;) {
+      const rank = tier.min + Math.floor(rnd() * (tier.max - tier.min + 1));
+      const deck = newDeck();
+      const quads = deck.filter(c => !c.joker && c.rank === rank);
+      const rest = shuffle(deck.filter(c => c.joker || c.rank !== rank), rnd).slice(0, 3);
+      const hand = shuffle(quads.concat(rest), rnd);
+      if (solve(hand).category === tier.name) return hand;
+    }
+  }
+
+  function dealUntil(rnd, accept) {
     for (;;) {
       const hand = deal(rnd);
-      const cat = solve(hand).category;
-      // Plain two pair is so common that it would swamp the rarer cases.
-      if (EXCEPTION_CATEGORIES.has(cat) && (cat !== 'Two Pair' || rnd() < 0.25)) return hand;
+      if (accept(solve(hand).category)) return hand;
     }
+  }
+
+  // Five Aces = four Aces + Joker; "with Kings" means the other two cards are a pair of Kings.
+  function dealFiveAces(rnd, withKings) {
+    const deck = newDeck();
+    const base = deck.filter(c => c.joker || c.rank === 14);
+    const others = deck.filter(c => !c.joker && c.rank !== 14);
+    for (;;) {
+      const extra = shuffle(others.slice(), rnd).slice(0, 2);
+      const pairOfKings = extra.every(c => c.rank === 13);
+      if (pairOfKings === withKings) return shuffle(base.concat(extra), rnd);
+    }
+  }
+
+  const TWO_ACES_JOKER = 'Two Aces and a Joker with a Straight or Flush';
+
+  // Joker + two Aces + four other cards, redealt until a straight/flush is possible.
+  function dealTwoAcesJoker(rnd) {
+    const deck = newDeck();
+    const aces = deck.filter(c => !c.joker && c.rank === 14);
+    const joker = deck.find(c => c.joker);
+    const others = deck.filter(c => !c.joker && c.rank !== 14);
+    for (;;) {
+      const twoAces = shuffle(aces.slice(), rnd).slice(0, 2);
+      const extra = shuffle(others.slice(), rnd).slice(0, 4);
+      const hand = shuffle([joker, ...twoAces, ...extra], rnd);
+      if (solve(hand).category === TWO_ACES_JOKER) return hand;
+    }
+  }
+
+  // Fixed shares: 10% SF two pair, 10% SF Ace-exception, 12% each kind of three of a kind,
+  // 3% each of the three four-of-a-kind tiers, 5% Five Aces (split with/without a pair of Kings),
+  // 5% two Aces and a Joker with a straight/flush. The remaining ~37% is the other exception cases.
+  function dealException(rnd = Math.random) {
+    const roll = rnd();
+    if (roll < 0.1) return dealUntil(rnd, c => c === SF_TWO_PAIR);
+    if (roll < 0.2) return dealUntil(rnd, c => c === SF_ACE_EXCEPTION);
+    if (roll < 0.32) return dealUntil(rnd, c => c === TRIPS_ACES);
+    if (roll < 0.44) return dealUntil(rnd, c => c === TRIPS_OTHER);
+    if (roll < 0.53) return dealQuads(rnd, QUADS_TIERS[Math.floor((roll - 0.44) / 0.03)]);
+    if (roll < 0.58) return dealFiveAces(rnd, roll < 0.555);
+    if (roll < 0.63) return dealTwoAcesJoker(rnd);
+    // Plain two pair is so common that it would swamp the rarer cases.
+    return dealUntil(rnd, c => EXCEPTION_CATEGORIES.has(c) && !FIXED_SHARE.has(c) &&
+      (c !== 'Two Pair' || rnd() < 0.25));
   }
 
   const api = { dealException, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, RANK_NAMES };
