@@ -30,14 +30,27 @@
   }
 
   function isSF5(cards) {
+    return highHandCategory(cards) > 0;
+  }
+
+  function highHandCategory(cards) {
     const non = cards.filter(c => !c.joker);
-    if (non.length >= 4 && non.every(c => c.suit === non[0].suit)) return true;
+    const hasJoker = non.length !== cards.length;
+    const flush = non.length === (hasJoker ? 4 : 5) &&
+      non.every(c => c.suit === non[0].suit);
     const ranks = non.map(c => c.rank);
-    if (new Set(ranks).size !== ranks.length) return false;
-    for (let s = 1; s <= 10; s++) {
-      if (ranks.every(r => { const v = s === 1 && r === 14 ? 1 : r; return v >= s && v <= s + 4; })) return true;
-    }
-    return false;
+    const straight = (hasJoker ? ranks.length === 4 : ranks.length === 5) &&
+      new Set(ranks).size === ranks.length &&
+      Array.from({ length: 10 }, (_, i) => i + 1).some(start =>
+        ranks.every(r => {
+          const value = start === 1 && r === 14 ? 1 : r;
+          return value >= start && value <= start + 4;
+        }));
+
+    if (flush && straight) return 3;
+    if (flush) return 2;
+    if (straight) return 1;
+    return 0;
   }
 
   function combos(n, k) {
@@ -154,8 +167,14 @@
     const nat = cards.filter(c => !c.joker);
     const natCounts = groupsOf(nat.map(c => c.rank));
     const hasJoker = cards.some(c => c.joker);
-    const valid = SPLITS.filter(([i, j]) =>
-      isSF5(cards.filter((_, k) => k !== i && k !== j)));
+    const candidates = SPLITS.map(split => ({
+      split,
+      category: highHandCategory(cards.filter((_, k) => !split.includes(k)))
+    })).filter(candidate => candidate.category > 0);
+    const strongestCategory = Math.max(...candidates.map(candidate => candidate.category));
+    const valid = candidates
+      .filter(candidate => candidate.category === strongestCategory)
+      .map(candidate => candidate.split);
     const best = (list) => {
       let m = -1, out = [];
       for (const s of list) {
