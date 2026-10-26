@@ -242,7 +242,30 @@
     return 'Joker = Ace';
   }
 
-  const api = { jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, RANK_NAMES };
+  // Hands whose houseway rule has a special condition: two pair, straight/flush with
+  // one or two pair, three of a kind, plus the other conditional cases in the PDF.
+  const EXCEPTION_CATEGORIES = new Set([
+    'Two Pair',
+    'Straight/Flush with Two Pair',
+    'Straight/Flush with One Pair',
+    'Straight/Flush with One Pair (Ace + big pair exception)',
+    'Three of a Kind (Aces)',
+    'Three of a Kind (Kings and below)',
+    'Five Aces',
+    'Four of a Kind (10s–7s)',
+    'Two Aces and a Joker with a Straight or Flush'
+  ]);
+
+  function dealException(rnd = Math.random) {
+    for (;;) {
+      const hand = deal(rnd);
+      const cat = solve(hand).category;
+      // Plain two pair is so common that it would swamp the rarer cases.
+      if (EXCEPTION_CATEGORIES.has(cat) && (cat !== 'Two Pair' || rnd() < 0.25)) return hand;
+    }
+  }
+
+  const api = { dealException, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, RANK_NAMES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Houseway = api;
 })(typeof window !== 'undefined' ? window : globalThis);

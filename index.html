@@ -59,6 +59,7 @@
   <select id="mode">
     <option value="normal">Normal (random 7 cards)</option>
     <option value="joker">Joker Hands (always includes the Joker)</option>
+    <option value="exceptions">Exceptions Only (two pair, straight/flush with pairs, three of a kind, etc.)</option>
   </select>
 </div>
 <div id="stats"></div>
@@ -109,7 +110,8 @@
   }
 
   function newHand() {
-    cards = Houseway.deal(undefined, document.getElementById('mode').value === 'joker').sort((a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit));
+    const mode = document.getElementById('mode').value;
+    cards = (mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker')).sort((a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit));
     solution = Houseway.solve(cards);
     sel = []; answered = false;
     fb.style.display = 'none'; nextBtn.style.display = 'none';
