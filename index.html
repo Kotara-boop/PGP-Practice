@@ -48,6 +48,10 @@
   details { margin-top: 20px; background: rgba(24, 4, 32, 0.5); border: 1px solid rgba(240, 171, 252, 0.2); padding: 12px 16px; border-radius: 16px; }
   summary { cursor: pointer; font-weight: 600; }
   details li { margin: 4px 0; color: #f5d0fe; }
+  details > ul > li { margin: 12px 0; }
+  details > ul > li > b { text-decoration: underline; }
+  details ul ul { margin: 6px 0 6px 18px; }
+  details p { color: #f5d0fe; margin: 10px 0 2px; font-size: 0.8rem; }
 </style>
 </head>
 <body>
@@ -72,18 +76,52 @@
 <details>
   <summary>Houseway rules reference</summary>
   <ul>
-    <li><b>Five Aces:</b> pair of Aces low unless a pair of Kings can go low.</li>
+    <li><b>Five Aces:</b> pair of Aces low <i>unless</i> a pair of Kings can go low.</li>
     <li><b>Four of a kind + trips:</b> highest pair low; full house or quads high.</li>
     <li><b>Four of a kind + pair:</b> pair low, quads high.</li>
-    <li><b>Four of a kind:</b> A–J always split; 10–7 quads high if a King+ can go low, else split; 6s and below never split (next two highest low).</li>
+    <li><b>Four of a kind:</b>
+      <ul>
+        <li><b>Aces–Jacks:</b> always split.</li>
+        <li><b>10s–7s:</b> quads high if a King or better can go low; otherwise split.</li>
+        <li><b>6s and below:</b> never split — quads high, next two highest cards low.</li>
+      </ul>
+    </li>
     <li><b>Straight/Flush/SF + trips:</b> highest pair low (Full House strategy).</li>
-    <li><b>Full house + pair:</b> higher pair low. <b>Full house:</b> pair low, trips high.</li>
+    <li><b>Full house + pair:</b> higher pair low.</li>
+    <li><b>Full house:</b> pair low, trips high.</li>
     <li><b>Two Aces + Joker with straight/flush:</b> straight/flush high; one Ace and the other card low.</li>
-    <li><b>Straight/Flush/SF:</b> when more than one is possible, keep a straight flush high before a flush, and a flush before a straight. Two pair → Two Pair strategy; one pair → highest two cards that leave the best hand high (Ace + K/Q/J/10 pair exception: Ace low, pair high, unless the Ace can go low and keep the hand); no pair → two highest cards that leave it.</li>
-    <li><b>Two trips:</b> pair from higher set low. <b>Trips:</b> Aces → Ace + next highest low; otherwise trips high, next two highest low.</li>
-    <li><b>Three pair:</b> highest pair low. <b>Two pair:</b> J+ big pair split; 10–7 both high only with an Ace low; 6–3 both high only with Ace/King low.</li>
-    <li><b>One pair:</b> pair high, two highest others low. <b>No pair:</b> 2nd and 3rd highest low.</li>
+    <li><b>Straight/Flush/SF:</b>
+      <ul>
+        <li><b>With No Pair:</b> Place the two highest cards in the low hand that leave the complete straight, flush or straight flush in the high hand.</li>
+        <li><b>With One Pair:</b> Place highest possible two cards (pair or no pair) in the low hand that will leave any complete straight, flush or straight flush in the high hand.
+          <ul>
+            <li><i><b>Exception:</b> With an Ace and a pair of Kings, Queens, Jacks, or Tens, play the Ace in the low and the pair in the high hand, <span style="font-style: normal">unless</span> you can place the Ace in the low hand and keep the complete straight, flush or straight flush in the high hand.</i></li>
+          </ul>
+        </li>
+        <li><b>With Two Pair:</b> Play according to Two Pair strategy.</li>
+        <li><b>With Three of a Kind:</b> Place pair in the low hand, complete straight, flush or straight flush in the high hand.</li>
+      </ul>
+    </li>
+    <li><b>Two trips:</b> pair from higher set low.</li>
+    <li><b>Three of a kind:</b>
+      <ul>
+        <li><b>Aces:</b> Ace + next highest card low.</li>
+        <li><b>Kings and below:</b> trips high, next two highest cards low.</li>
+      </ul>
+    </li>
+    <li><b>Three pair:</b> highest pair low.</li>
+    <li><b>Two pair:</b>
+      <ul>
+        <li><b>Big pair Jacks or better:</b> split the pairs.</li>
+        <li><b>Big pair 10s–7s:</b> both high only with an Ace low; otherwise split.</li>
+        <li><b>Big pair 6s–3s:</b> both high only with an Ace or King low; otherwise split.</li>
+      </ul>
+    </li>
+    <li><b>One pair:</b> pair high, two highest others low.</li>
+    <li><b>No pair:</b> 2nd and 3rd highest low.</li>
   </ul>
+  <p><b>Note 1:</b> when more than one (straight/flush/straight flush) is possible, play whichever leaves the better low hand; if two splits leave an identical low hand, prefer the stronger high hand (straight flush &gt; flush &gt; straight).</p>
+  <p><b>Note 2 (Joker foul rule):</b> if using the Joker to complete a straight/flush/straight flush will make the low hand outrank the high hand, strike out that possibility for the Joker (the Joker cannot play that card), and re-evaluate the hand from the top.</p>
 </details>
 </section></main>
 <script src="houseway.js"></script>

@@ -1,7 +1,12 @@
 /* Pai Gow Poker houseway engine (per "Pai Gow Poker Houseway Rules.pdf").
  * Card: {id, rank 2..14 (A=14), suit 'S'|'H'|'D'|'C', joker:boolean}
  * Joker: completes a straight / flush / straight flush if that is possible
- * anywhere in the 7 cards; otherwise it is an Ace.
+ * anywhere in the 7 cards; otherwise it is an Ace. If using the Joker for the
+ * straight/flush would foul the hand (low outranks high), it plays as an Ace
+ * and the whole hand is re-evaluated as an ordinary hand.
+ * When more than one of a straight / flush / straight flush is possible in the
+ * high hand, play the one that leaves the stronger low hand; if two splits
+ * leave an identical low hand, prefer the stronger high hand.
  */
 (function (root) {
   const SUITS = ['S', 'H', 'D', 'C'];
@@ -140,10 +145,7 @@
 
   function solve(cards) {
     const sf = sfPossible(cards);
-    const jokerAsWild = sf && cards.some(c => c.joker);
-    const jokerNote = cards.some(c => c.joker)
-      ? (jokerAsWild ? 'Joker is wild: it completes a straight/flush/straight flush.' : 'Joker plays as an Ace (no straight/flush possible).')
-      : null;
+    const hasJoker = cards.some(c => c.joker);
 
     let res;
     if (!sf) {
@@ -157,7 +159,10 @@
     } else {
       res = solveSF(cards);
     }
-    res.jokerNote = jokerNote;
+    res.jokerNote = !hasJoker ? null
+      : res.jokerAsAce ? 'Joker plays as an Ace (the Ace + big-pair exception would foul the hand).'
+      : sf ? 'Joker is wild: it completes a straight/flush/straight flush.'
+      : 'Joker plays as an Ace (no straight/flush possible).';
     res.hasSF = sf;
     if (!res.splits.length) throw new Error('No accepted split');
     return res;
@@ -171,17 +176,24 @@
       split,
       category: highHandCategory(cards.filter((_, k) => !split.includes(k)))
     })).filter(candidate => candidate.category > 0);
-    const strongestCategory = Math.max(...candidates.map(candidate => candidate.category));
-    const valid = candidates
-      .filter(candidate => candidate.category === strongestCategory)
-      .map(candidate => candidate.split);
+    // Straight, flush, and straight flush candidates all compete on equal
+    // footing: play whichever one leaves the stronger low hand.
+    const valid = candidates.map(candidate => candidate.split);
+    const catOf = new Map(candidates.map(c => [c.split.join(), c.category]));
+    // Stronger low hand wins; on an identical low hand, prefer the stronger
+    // high hand (straight flush > flush > straight).
     const best = (list) => {
       let m = -1, out = [];
       for (const s of list) {
         const sc = lowScore(rv(cards[s[0]], 14), rv(cards[s[1]], 14));
         if (sc > m) { m = sc; out = [s]; } else if (sc === m) out.push(s);
       }
-      return out;
+      let mc = -1, tied = [];
+      for (const s of out) {
+        const cat = catOf.get(s.join());
+        if (cat > mc) { mc = cat; tied = [s]; } else if (cat === mc) tied.push(s);
+      }
+      return tied;
     };
     const byValues = (target) => SPLITS.filter(([i, j]) => {
       const l = sortedDesc([rv(cards[i], 14), rv(cards[j], 14)]);
@@ -192,9 +204,10 @@
     const pairs = natCounts.filter(x => x[1] === 2).map(x => x[0]);
 
     if (hasJoker && nAces === 2) {
-      const c = best(valid.filter(([i, j]) =>
-        [i, j].filter(k => !cards[k].joker && cards[k].rank === 14).length === 1 && !cards[i].joker && !cards[j].joker));
-      if (c.length) return { category: 'Two Aces and a Joker with a Straight or Flush', rule: 'Play the straight or flush in the high hand, and one Ace plus the other card in the low hand.', splits: c };
+      // Better-low-hand rule applies here too: the pair of Aces goes low when it
+      // leaves a straight/flush high; otherwise one Ace plus the highest other card.
+      const c = best(valid);
+      if (c.length) return { category: 'Two Aces and a Joker with a Straight or Flush', rule: 'Play the straight/flush in the high hand and the strongest low hand that leaves it complete: the pair of Aces when possible, otherwise one Ace plus the highest other card.', splits: c };
     }
     if (trips) {
       const c = best(valid.filter(([i, j]) => !cards[i].joker && !cards[j].joker && cards[i].rank === cards[j].rank));
@@ -223,6 +236,19 @@
         const o = sortedDesc(others);
         // one Ace goes low; the other low card is the highest remaining
         const rest = o.slice(); rest.splice(rest.indexOf(14), 1);
+        if (rest[0] === 14) {
+          // The second low card would be the Joker, making a pair of Aces low that
+          // outranks the pair in the high hand — a foul. The Joker cannot complete
+          // the straight/flush in a valid set, so it plays as an Ace and the whole
+          // hand is re-evaluated from the top (Joker + Ace + a pair becomes Two Pair).
+          const vals = cards.map(c => rv(c, 14));
+          const t = ordinaryTarget(vals);
+          const splits = SPLITS.filter(([i, j]) => {
+            const l = sortedDesc([vals[i], vals[j]]);
+            return l[0] === t.lowValues[0] && l[1] === t.lowValues[1];
+          });
+          return { category: t.category, rule: t.rule, splits, jokerAsAce: true };
+        }
         return { category: 'Straight/Flush with One Pair (Ace + big pair exception)', rule, splits: byValues([14, rest[0]]) };
       }
       const c = best(valid);
