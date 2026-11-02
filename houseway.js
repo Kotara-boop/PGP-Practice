@@ -263,6 +263,17 @@
     return { low: split.map(i => cards[i]), high: cards.filter((_, k) => !split.includes(k)) };
   }
 
+  // Display order: grouped ranks first (quads/trips/pairs, larger group then
+  // higher rank), then singles by rank; Joker last. Ties broken by suit.
+  function sortForDisplay(list) {
+    const counts = new Map();
+    list.forEach(c => { if (!c.joker) counts.set(c.rank, (counts.get(c.rank) || 0) + 1); });
+    return list.slice().sort((a, b) =>
+      (counts.get(b.rank) || 0) - (counts.get(a.rank) || 0) ||
+      b.rank - a.rank ||
+      (a.joker ? 'Z' : a.suit).localeCompare(b.joker ? 'Z' : b.suit));
+  }
+
   // Describes what the Joker stands for in the given split, e.g. "Joker = 5 (completes the straight)".
   function jokerRole(cards, split) {
     const ji = cards.findIndex(c => c.joker);
@@ -379,7 +390,7 @@
       (c !== 'Two Pair' || rnd() < 0.25));
   }
 
-  const api = { dealException, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, RANK_NAMES };
+  const api = { dealException, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Houseway = api;
 })(typeof window !== 'undefined' ? window : globalThis);

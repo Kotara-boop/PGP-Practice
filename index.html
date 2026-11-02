@@ -140,6 +140,7 @@
   const fb = document.getElementById('feedback');
   const statsEl = document.getElementById('stats');
   let cards, sel, solution, answered, correct = 0, total = 0, streak = 0;
+  const byRank = (a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit);
 
   function cardEl(c, clickable) {
     const d = document.createElement('div');
@@ -157,7 +158,7 @@
   function newHand() {
     const mode = document.getElementById('mode').value;
     cards = mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker');
-    if (document.getElementById('arrangement').value === 'sorted') cards.sort((a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit));
+    if (document.getElementById('arrangement').value === 'sorted') cards.sort(byRank);
     solution = Houseway.solve(cards);
     sel = []; answered = false;
     fb.style.display = 'none'; nextBtn.style.display = 'none';
@@ -190,10 +191,10 @@
     fb.className = ok ? 'good' : 'bad';
     fb.innerHTML = `<b>${ok ? '✅ Correct!' : '❌ Not quite.'}</b><br><b>Hand type:</b> ${solution.category}<br><b>Rule:</b> ${solution.rule}<br>` +
       (solution.jokerNote ? `<b>Joker:</b> ${solution.jokerNote} <i>(${Houseway.jokerRole(cards, solution.splits[0])})</i><br>` : '') + '<b>Low hand:</b> ';
-    fb.appendChild(miniRow(best.low));
+    fb.appendChild(miniRow(Houseway.sortForDisplay(best.low)));
     fb.appendChild(document.createElement('br'));
     fb.appendChild(Object.assign(document.createElement('b'), { textContent: 'High hand: ' }));
-    fb.appendChild(miniRow(best.high));
+    fb.appendChild(miniRow(Houseway.sortForDisplay(best.high)));
     fb.style.display = 'block';
     nextBtn.style.display = 'inline-block';
     render();
