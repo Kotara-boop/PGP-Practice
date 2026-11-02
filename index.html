@@ -66,6 +66,13 @@
     <option value="exceptions">Exceptions Practice</option>
   </select>
 </div>
+<div class="mode-controls">
+  <label class="mode-label" for="arrangement">Card Arrangement</label>
+  <select id="arrangement">
+    <option value="sorted">Sorted</option>
+    <option value="unsorted">Unsorted</option>
+  </select>
+</div>
 <div id="stats"></div>
 <div id="hand"></div>
 <div class="actions">
@@ -149,7 +156,8 @@
 
   function newHand() {
     const mode = document.getElementById('mode').value;
-    cards = (mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker')).sort((a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit));
+    cards = mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker');
+    if (document.getElementById('arrangement').value === 'sorted') cards.sort((a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit));
     solution = Houseway.solve(cards);
     sel = []; answered = false;
     fb.style.display = 'none'; nextBtn.style.display = 'none';
@@ -192,6 +200,7 @@
   };
   nextBtn.onclick = newHand;
   document.getElementById('mode').onchange = newHand;
+  document.getElementById('arrangement').onchange = newHand;
   newHand();
 </script>
 </body>
