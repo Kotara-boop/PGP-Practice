@@ -390,7 +390,129 @@
       (c !== 'Two Pair' || rnd() < 0.25));
   }
 
-  const api = { dealException, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
+  /* ---- Winner prediction: hand evaluation, comparison, and outcome ---- */
+
+  const PLURALS = { 2: '2s', 3: '3s', 4: '4s', 5: '5s', 6: '6s', 7: '7s', 8: '8s', 9: '9s', 10: '10s', 11: 'Jacks', 12: 'Queens', 13: 'Kings', 14: 'Aces' };
+
+  // values: 5 rank values (Joker already resolved); flush: all one suit.
+  // cat: 9 five of a kind, 8 SF, 7 quads, 6 full house, 5 flush, 4 straight,
+  // 3 trips, 2 two pair, 1 pair, 0 high card. tb: tiebreak ranks, high first.
+  function eval5values(values, flush) {
+    const ranks = sortedDesc(values);
+    const g = groupsOf(values);
+    const pat = g.map(x => x[1]).join('');
+    const uniq = [...new Set(ranks)];
+    let sHigh = 0;
+    if (uniq.length === 5) {
+      if (uniq[0] - uniq[4] === 4) sHigh = uniq[0];
+      else if (uniq[0] === 14 && uniq[1] === 5) sHigh = 5; // wheel
+    }
+    if (pat === '5') return { cat: 9, tb: [g[0][0]] };
+    if (sHigh && flush) return { cat: 8, tb: [sHigh] };
+    if (pat === '41') return { cat: 7, tb: [g[0][0], g[1][0]] };
+    if (pat === '32') return { cat: 6, tb: [g[0][0], g[1][0]] };
+    if (flush) return { cat: 5, tb: ranks };
+    if (sHigh) return { cat: 4, tb: [sHigh] };
+    if (pat === '311') return { cat: 3, tb: [g[0][0], g[1][0], g[2][0]] };
+    if (pat === '221') return { cat: 2, tb: [g[0][0], g[1][0], g[2][0]] };
+    if (pat === '2111') return { cat: 1, tb: [g[0][0], g[1][0], g[2][0], g[3][0]] };
+    return { cat: 0, tb: ranks };
+  }
+
+  // Highest straight 4 natural ranks can make with the Joker; 0 if none.
+  function straightHighWithJoker(ranks) {
+    for (let start = 10; start >= 1; start--) {
+      if (ranks.every(r => { const v = start === 1 && r === 14 ? 1 : r; return v >= start && v <= start + 4; }))
+        return start === 1 ? 5 : start + 4;
+    }
+    return 0;
+  }
+
+  // Evaluate a 5-card hand. Joker: completes a straight/flush/straight flush if
+  // possible (in a flush it is the highest rank of the suit not present);
+  // otherwise it is an Ace.
+  function eval5(cards) {
+    const nat = cards.filter(c => !c.joker);
+    if (nat.length === 5) return eval5values(nat.map(c => c.rank), nat.every(c => c.suit === nat[0].suit));
+    const ranks = nat.map(c => c.rank);
+    const cat = highHandCategory(cards);
+    if (cat === 3) return { cat: 8, tb: [straightHighWithJoker(ranks)] };
+    if (cat === 2) {
+      let jr = 14; while (ranks.includes(jr)) jr--;
+      return { cat: 5, tb: sortedDesc(ranks.concat(jr)) };
+    }
+    if (cat === 1) return { cat: 4, tb: [straightHighWithJoker(ranks)] };
+    return eval5values(ranks.concat(14), false);
+  }
+
+  // Evaluate a 2-card low hand (the Joker is an Ace).
+  function eval2(cards) {
+    const v = cards.map(c => rv(c, 14));
+    return v[0] === v[1] ? { cat: 1, tb: [v[0]] } : { cat: 0, tb: sortedDesc(v) };
+  }
+
+  function cmpTB(a, b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = a[i] || 0, y = b[i] || 0;
+      if (x !== y) return x > y ? 1 : -1;
+    }
+    return 0;
+  }
+
+  function cmpEval(x, y) { return x.cat !== y.cat ? (x.cat > y.cat ? 1 : -1) : cmpTB(x.tb, y.tb); }
+
+  function name5(e) {
+    switch (e.cat) {
+      case 9: return `Five of a Kind, ${PLURALS[e.tb[0]]}`;
+      case 8: return `Straight Flush, ${rn(e.tb[0])} high`;
+      case 7: return `Four of a Kind, ${PLURALS[e.tb[0]]}`;
+      case 6: return `Full House, ${PLURALS[e.tb[0]]} over ${PLURALS[e.tb[1]]}`;
+      case 5: return `Flush, ${rn(e.tb[0])} high`;
+      case 4: return `Straight, ${rn(e.tb[0])} high`;
+      case 3: return `Three of a Kind, ${PLURALS[e.tb[0]]}`;
+      case 2: return `Two Pair, ${PLURALS[e.tb[0]]} and ${PLURALS[e.tb[1]]}`;
+      case 1: return `Pair of ${PLURALS[e.tb[0]]}`;
+      default: return `${rn(e.tb[0])} high`;
+    }
+  }
+
+  function name2(e) { return e.cat === 1 ? `Pair of ${PLURALS[e.tb[0]]}` : `${rn(e.tb[0])}-${rn(e.tb[1])} high`; }
+
+  // Result of a round with the dealer's hand set by the given split. Copies go
+  // to the dealer; a player whose low hand outranks the high hand fouls (an
+  // automatic loss). cmps are from the player's perspective.
+  function winnerOutcome(dealerCards, dealerSplit, playerHigh, playerLow) {
+    const d = describeSplit(dealerCards, dealerSplit);
+    const dh = eval5(d.high), dl = eval2(d.low);
+    const ph = eval5(playerHigh), pl = eval2(playerLow);
+    const foul = cmpEval(pl, ph) > 0;
+    const highCmp = cmpEval(ph, dh), lowCmp = cmpEval(pl, dl);
+    const outcome = foul ? 'foul'
+      : highCmp > 0 && lowCmp > 0 ? 'win'
+      : highCmp <= 0 && lowCmp <= 0 ? 'lose'
+      : 'push';
+    return { outcome, foul, highCmp, lowCmp, dh, dl, ph, pl };
+  }
+
+  // Deal a winner-prediction round from a single 53-card deck: 7 cards each for
+  // the dealer and the player. The player's hand is pre-set — by houseway, or
+  // (~20% of the time, when the cards allow it) fouled so the low hand outranks
+  // the high hand.
+  function dealWinner(rnd = Math.random) {
+    const deck = shuffle(newDeck(), rnd);
+    const dealer = deck.slice(0, 7);
+    const player = deck.slice(7, 14);
+    const fouls = SPLITS.filter(([i, j]) =>
+      cmpEval(eval2([player[i], player[j]]), eval5(player.filter((_, k) => k !== i && k !== j))) > 0);
+    const fouled = fouls.length > 0 && rnd() < 0.2;
+    const split = fouled ? fouls[Math.floor(rnd() * fouls.length)] : solve(player).splits[0];
+    return {
+      dealer,
+      player: { cards: player, high: player.filter((_, k) => !split.includes(k)), low: split.map(i => player[i]), fouled }
+    };
+  }
+
+  const api = { dealException, dealWinner, winnerOutcome, eval5, eval2, name5, name2, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Houseway = api;
 })(typeof window !== 'undefined' ? window : globalThis);

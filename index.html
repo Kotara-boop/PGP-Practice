@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pai Gow Poker Houseway Practice</title>
+<title>Pai Gow Poker Practice</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; padding: 24px; display: grid; place-items: center;
@@ -52,14 +52,24 @@
   details > ul > li > b { text-decoration: underline; }
   details ul ul { margin: 6px 0 6px 18px; }
   details p { color: #f5d0fe; margin: 10px 0 2px; font-size: 0.8rem; }
+  .mode-btn { background: rgba(112, 26, 117, 0.55); border: 1px solid rgba(240, 171, 252, 0.35); }
+  .mode-btn.active { background: linear-gradient(135deg, #e879f9, #a21caf); border-color: transparent; }
+  .ph-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
+  .ph-label { font-weight: 700; color: #f5d0fe; }
+  #dealer-label { text-align: center; color: #f5d0fe; font-weight: 600; margin-top: 14px; }
 </style>
 </head>
 <body>
 <main class="app-shell"><section class="panel">
-<h1>Pai Gow Poker Houseway Practice</h1>
-<p class="sub">Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.</p>
+<h1>Pai Gow Poker Practice</h1>
+<p class="sub" id="sub">Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.</p>
 <div class="mode-controls">
-  <label class="mode-label" for="mode">Mode</label>
+  <span class="mode-label">Practice:</span>
+  <button id="mode-houseway" class="mode-btn active">Houseway</button>
+  <button id="mode-winner" class="mode-btn">Winner Prediction</button>
+</div>
+<div class="mode-controls" id="category-row">
+  <label class="mode-label" for="mode">Category</label>
   <select id="mode">
     <option value="normal">Normal (random 7 cards)</option>
     <option value="joker">Joker Hands (always includes the Joker)</option>
@@ -74,9 +84,20 @@
   </select>
 </div>
 <div id="stats"></div>
+<div id="player-area" style="display:none">
+  <div class="ph-row"><span class="ph-label">Player's High&nbsp;Hand</span><span id="player-high" class="mini"></span></div>
+  <div class="ph-row"><span class="ph-label">Player's Low&nbsp;Hand</span><span id="player-low" class="mini"></span></div>
+</div>
+<div id="dealer-label" style="display:none">Dealer's 7 cards — pick the <b>two</b> for the Low Hand:</div>
 <div id="hand"></div>
 <div class="actions">
   <button id="submit" disabled>Submit Low Hand</button>
+  <span id="winner-btns" style="display:none">
+    <button data-outcome="win" disabled>Player Wins</button>
+    <button data-outcome="push" disabled>Push</button>
+    <button data-outcome="lose" disabled>Player Loses</button>
+    <button data-outcome="foul" disabled>Player Fouls</button>
+  </span>
   <button id="next" style="display:none">Next Hand ▶</button>
 </div>
 <div id="feedback"></div>
@@ -129,6 +150,7 @@
   </ul>
   <p><b>Note 1:</b> when more than one (straight/flush/straight flush) is possible, play whichever leaves the better low hand; if two splits leave an identical low hand, prefer the stronger high hand (straight flush &gt; flush &gt; straight).</p>
   <p><b>Note 2 (Joker foul rule):</b> if using the Joker to complete a straight/flush/straight flush will make the low hand outrank the high hand, strike out that possibility for the Joker (the Joker cannot play that card), and re-evaluate the hand from the top.</p>
+  <p><b>Winner Prediction:</b> the player must beat both of the dealer's hands to win; one each is a push; copies (exact ties) go to the dealer. If the player's Low Hand outranks the High Hand, the player fouls and loses automatically.</p>
 </details>
 </section></main>
 <script src="houseway.js"></script>
@@ -139,8 +161,37 @@
   const nextBtn = document.getElementById('next');
   const fb = document.getElementById('feedback');
   const statsEl = document.getElementById('stats');
+  const subEl = document.getElementById('sub');
+  const playerArea = document.getElementById('player-area');
+  const playerHighEl = document.getElementById('player-high');
+  const playerLowEl = document.getElementById('player-low');
+  const dealerLabel = document.getElementById('dealer-label');
+  const winnerBtns = document.getElementById('winner-btns');
+  const outcomeBtns = [...winnerBtns.querySelectorAll('button')];
   let cards, sel, solution, answered, correct = 0, total = 0, streak = 0;
+  let playerHigh, playerLow;
+  const w = { rounds: 0, both: 0, houseway: 0, prediction: 0, streak: 0 };
   const byRank = (a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit);
+  const SUBS = {
+    winner: 'Set the dealer\'s hand by houseway (pick the <b>two cards</b> for the dealer\'s Low Hand), then predict the result. Copies go to the dealer; if the player\'s Low Hand outranks the High Hand, the player fouls and loses.',
+    house: 'Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.'
+  };
+  const OUTCOME_NAMES = { win: 'Player Wins', push: 'Push', lose: 'Player Loses', foul: 'Player Fouls' };
+  const modeSelect = document.getElementById('mode');
+  const categoryRow = document.getElementById('category-row');
+  const modeBtns = { houseway: document.getElementById('mode-houseway'), winner: document.getElementById('mode-winner') };
+  let modeCategory = 'houseway';
+  const winnerMode = () => modeCategory === 'winner';
+
+  function setModeCategory(cat) {
+    modeCategory = cat;
+    modeBtns.houseway.classList.toggle('active', cat === 'houseway');
+    modeBtns.winner.classList.toggle('active', cat === 'winner');
+    categoryRow.style.display = cat === 'houseway' ? '' : 'none';
+    newHand();
+  }
+  modeBtns.houseway.onclick = () => setModeCategory('houseway');
+  modeBtns.winner.onclick = () => setModeCategory('winner');
 
   function cardEl(c, clickable) {
     const d = document.createElement('div');
@@ -156,12 +207,31 @@
   }
 
   function newHand() {
-    const mode = document.getElementById('mode').value;
-    cards = mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker');
+    const mode = modeSelect.value;
+    const wm = winnerMode();
+    if (wm) {
+      const round = Houseway.dealWinner();
+      cards = round.dealer;
+      playerHigh = round.player.high;
+      playerLow = round.player.low;
+    } else {
+      cards = mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker');
+    }
     if (document.getElementById('arrangement').value === 'sorted') cards.sort(byRank);
     solution = Houseway.solve(cards);
     sel = []; answered = false;
     fb.style.display = 'none'; nextBtn.style.display = 'none';
+    subEl.innerHTML = wm ? SUBS.winner : SUBS.house;
+    playerArea.style.display = wm ? '' : 'none';
+    dealerLabel.style.display = wm ? '' : 'none';
+    submitBtn.style.display = wm ? 'none' : '';
+    winnerBtns.style.display = wm ? '' : 'none';
+    if (wm) {
+      playerHighEl.innerHTML = '';
+      Houseway.sortForDisplay(playerHigh).forEach(c => playerHighEl.appendChild(cardEl(c, false)));
+      playerLowEl.innerHTML = '';
+      Houseway.sortForDisplay(playerLow).forEach(c => playerLowEl.appendChild(cardEl(c, false)));
+    }
     render();
   }
 
@@ -178,29 +248,64 @@
       handEl.appendChild(el);
     });
     submitBtn.disabled = answered || sel.length !== 2;
-    statsEl.textContent = `Score: ${correct}/${total}   Streak: ${streak}`;
+    outcomeBtns.forEach(b => { b.disabled = answered || sel.length !== 2; });
+    statsEl.textContent = winnerMode()
+      ? `Score: ${w.both}/${w.rounds}   Houseway: ${w.houseway}/${w.rounds}   Predictions: ${w.prediction}/${w.rounds}   Streak: ${w.streak}`
+      : `Score: ${correct}/${total}   Streak: ${streak}`;
   }
 
   function same(a, b) { return a.length === b.length && a.every(x => b.includes(x)); }
+
+  function showDealerSolution(prefix = '') {
+    const best = Houseway.describeSplit(cards, solution.splits[0]);
+    fb.insertAdjacentHTML('beforeend', `<b>Hand type:</b> ${solution.category}<br><b>Rule:</b> ${solution.rule}<br>` +
+      (solution.jokerNote ? `<b>Joker:</b> ${solution.jokerNote} <i>(${Houseway.jokerRole(cards, solution.splits[0])})</i><br>` : '') + `<b>${prefix}Low hand:</b> `);
+    fb.appendChild(miniRow(Houseway.sortForDisplay(best.low)));
+    fb.appendChild(document.createElement('br'));
+    fb.appendChild(Object.assign(document.createElement('b'), { textContent: `${prefix}High hand: ` }));
+    fb.appendChild(miniRow(Houseway.sortForDisplay(best.high)));
+  }
 
   submitBtn.onclick = () => {
     answered = true; total++;
     const ok = solution.splits.some(s => same(s, sel));
     ok ? (correct++, streak++) : (streak = 0);
-    const best = Houseway.describeSplit(cards, solution.splits[0]);
     fb.className = ok ? 'good' : 'bad';
-    fb.innerHTML = `<b>${ok ? '✅ Correct!' : '❌ Not quite.'}</b><br><b>Hand type:</b> ${solution.category}<br><b>Rule:</b> ${solution.rule}<br>` +
-      (solution.jokerNote ? `<b>Joker:</b> ${solution.jokerNote} <i>(${Houseway.jokerRole(cards, solution.splits[0])})</i><br>` : '') + '<b>Low hand:</b> ';
-    fb.appendChild(miniRow(Houseway.sortForDisplay(best.low)));
-    fb.appendChild(document.createElement('br'));
-    fb.appendChild(Object.assign(document.createElement('b'), { textContent: 'High hand: ' }));
-    fb.appendChild(miniRow(Houseway.sortForDisplay(best.high)));
+    fb.innerHTML = `<b>${ok ? '✅ Correct!' : '❌ Not quite.'}</b><br>`;
+    showDealerSolution();
     fb.style.display = 'block';
     nextBtn.style.display = 'inline-block';
     render();
   };
+
+  outcomeBtns.forEach(btn => btn.onclick = () => {
+    answered = true; w.rounds++;
+    const pred = btn.dataset.outcome;
+    const hwOK = solution.splits.some(s => same(s, sel));
+    const actual = Houseway.winnerOutcome(cards, solution.splits[0], playerHigh, playerLow);
+    const predOK = pred === actual.outcome;
+    if (hwOK) w.houseway++;
+    if (predOK) w.prediction++;
+    if (hwOK && predOK) { w.both++; w.streak++; } else w.streak = 0;
+    fb.className = hwOK && predOK ? 'good' : 'bad';
+    fb.innerHTML = `<b>${hwOK ? '✅' : '❌'} Houseway:</b> ${hwOK ? 'correct!' : 'not quite.'}<br>`;
+    showDealerSolution("Dealer's ");
+    const cmpText = cmp => cmp > 0 ? 'Player wins' : cmp < 0 ? 'Dealer wins' : 'copy — Dealer wins';
+    const explain = actual.foul
+      ? `The player's Low Hand (${Houseway.name2(actual.pl)}) outranks the High Hand (${Houseway.name5(actual.ph)}) — a foul, automatic loss.`
+      : `High hands: Player's ${Houseway.name5(actual.ph)} vs Dealer's ${Houseway.name5(actual.dh)} → ${cmpText(actual.highCmp)}.<br>` +
+        `Low hands: Player's ${Houseway.name2(actual.pl)} vs Dealer's ${Houseway.name2(actual.dl)} → ${cmpText(actual.lowCmp)}.<br>` +
+        (actual.outcome === 'win' ? 'Player wins both hands.' :
+         actual.outcome === 'lose' ? 'Dealer wins both hands (copies go to the dealer).' :
+         'Each side wins one hand.');
+    const note = hwOK ? '' : ' <i>(Result is based on the correct houseway setting shown above.)</i>';
+    fb.insertAdjacentHTML('beforeend', `<br><b>${predOK ? '✅' : '❌'} Prediction:</b> you said “${OUTCOME_NAMES[pred]}”; the correct answer is <b>${OUTCOME_NAMES[actual.outcome]}</b>.${note}<br>${explain}`);
+    fb.style.display = 'block';
+    nextBtn.style.display = 'inline-block';
+    render();
+  });
   nextBtn.onclick = newHand;
-  document.getElementById('mode').onchange = newHand;
+  modeSelect.onchange = newHand;
   document.getElementById('arrangement').onchange = newHand;
   newHand();
 </script>
