@@ -54,6 +54,16 @@
   details p { color: #f5d0fe; margin: 10px 0 2px; font-size: 0.8rem; }
   .mode-btn { background: rgba(112, 26, 117, 0.55); border: 1px solid rgba(240, 171, 252, 0.35); }
   .mode-btn.active { background: linear-gradient(135deg, #e879f9, #a21caf); border-color: transparent; }
+  @media (max-width: 600px) {
+    .mode-row { align-items: stretch; gap: 8px; }
+    .mode-row .mode-label { flex-basis: 100%; }
+    .mode-row .mode-btn { flex: 1 1 0; margin: 0; padding: 10px 8px; font-size: .8rem; }
+    .mode-controls select { width: 100%; }
+    #hand { gap: 6px; }
+    .card { font-size: 1.2rem; }
+    .card span { font-size: 1.4rem; }
+    .card.joker { font-size: .8rem; }
+  }
   .ph-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
   .ph-label { font-weight: 700; color: #f5d0fe; }
   #dealer-label { text-align: center; color: #f5d0fe; font-weight: 600; margin-top: 14px; }
@@ -63,7 +73,7 @@
 <main class="app-shell"><section class="panel">
 <h1>Pai Gow Poker Practice</h1>
 <p class="sub" id="sub">Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.</p>
-<div class="mode-controls">
+<div class="mode-controls mode-row">
   <span class="mode-label">Practice:</span>
   <button id="mode-houseway" class="mode-btn active">Houseway</button>
   <button id="mode-winner" class="mode-btn">Winner Prediction</button>
