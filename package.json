@@ -1,0 +1,23 @@
+{
+  "name": "pgp-practice",
+  "version": "1.0.0",
+  "description": "Pai Gow Poker Practice",
+  "main": "houseway.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kotara-boop/PGP-Practice.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Kotara-boop/PGP-Practice/issues"
+  },
+  "homepage": "https://github.com/Kotara-boop/PGP-Practice#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
