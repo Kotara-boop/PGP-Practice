@@ -496,7 +496,7 @@
 
   // Deal a winner-prediction round from a single 53-card deck: 7 cards each for
   // the dealer and the player. The player's hand is pre-set — by houseway, or
-  // (~20% of the time, when the cards allow it) fouled so the low hand outranks
+  // (~15% of the time, when the cards allow it) fouled so the low hand outranks
   // the high hand.
   function dealWinner(rnd = Math.random) {
     const deck = shuffle(newDeck(), rnd);
@@ -504,7 +504,7 @@
     const player = deck.slice(7, 14);
     const fouls = SPLITS.filter(([i, j]) =>
       cmpEval(eval2([player[i], player[j]]), eval5(player.filter((_, k) => k !== i && k !== j))) > 0);
-    const fouled = fouls.length > 0 && rnd() < 0.2;
+    const fouled = fouls.length > 0 && rnd() < 0.15;
     const split = fouled ? fouls[Math.floor(rnd() * fouls.length)] : solve(player).splits[0];
     return {
       dealer,
