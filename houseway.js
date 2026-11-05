@@ -374,8 +374,8 @@
   }
 
   // Fixed shares: 10% SF two pair, 10% SF Ace-exception, 12% each kind of three of a kind,
-  // 3% each of the three four-of-a-kind tiers, 5% Five Aces (split with/without a pair of Kings),
-  // 5% two Aces and a Joker with a straight/flush. The remaining ~37% is the other exception cases.
+  // 3% each of the three four-of-a-kind tiers, 4% Five Aces (split with/without a pair of Kings),
+  // 5% two Aces and a Joker with a straight/flush. The remaining ~38% is the other exception cases.
   function dealException(rnd = Math.random) {
     const roll = rnd();
     if (roll < 0.1) return dealUntil(rnd, c => c === SF_TWO_PAIR);
@@ -383,8 +383,8 @@
     if (roll < 0.32) return dealUntil(rnd, c => c === TRIPS_ACES);
     if (roll < 0.44) return dealUntil(rnd, c => c === TRIPS_OTHER);
     if (roll < 0.53) return dealQuads(rnd, QUADS_TIERS[Math.floor((roll - 0.44) / 0.03)]);
-    if (roll < 0.58) return dealFiveAces(rnd, roll < 0.555);
-    if (roll < 0.63) return dealTwoAcesJoker(rnd);
+    if (roll < 0.57) return dealFiveAces(rnd, roll < 0.55);
+    if (roll < 0.62) return dealTwoAcesJoker(rnd);
     // Plain two pair is so common that it would swamp the rarer cases.
     return dealUntil(rnd, c => EXCEPTION_CATEGORIES.has(c) && !FIXED_SHARE.has(c) &&
       (c !== 'Two Pair' || rnd() < 0.25));
