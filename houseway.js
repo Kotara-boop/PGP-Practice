@@ -349,6 +349,13 @@
     }
   }
 
+  // Ace-exception practice: only hands that land in the Straight/Flush with One
+  // Pair (Ace + big pair exception) category — some use the exception, some
+  // fall back to the default Ace-low/pair-high play.
+  function dealAceException(rnd = Math.random) {
+    return dealUntil(rnd, c => c === SF_ACE_EXCEPTION);
+  }
+
   // Five Aces = four Aces + Joker; "with Kings" means the other two cards are a pair of Kings.
   function dealFiveAces(rnd, withKings) {
     const deck = newDeck();
@@ -516,7 +523,7 @@
     };
   }
 
-  const api = { dealException, dealWinner, winnerOutcome, eval5, eval2, name5, name2, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
+  const api = { dealException, dealAceException, dealWinner, winnerOutcome, eval5, eval2, name5, name2, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Houseway = api;
 })(typeof window !== 'undefined' ? window : globalThis);

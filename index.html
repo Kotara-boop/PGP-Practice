@@ -74,6 +74,7 @@
     <option value="normal">Normal (random 7 cards)</option>
     <option value="joker">Joker Hands (always includes the Joker)</option>
     <option value="exceptions">Exceptions Practice</option>
+    <option value="ace-exception">Ace Exception</option>
   </select>
 </div>
 <div class="mode-controls">
@@ -215,7 +216,9 @@
       playerHigh = round.player.high;
       playerLow = round.player.low;
     } else {
-      cards = mode === 'exceptions' ? Houseway.dealException() : Houseway.deal(undefined, mode === 'joker');
+      cards = mode === 'exceptions' ? Houseway.dealException()
+        : mode === 'ace-exception' ? Houseway.dealAceException()
+        : Houseway.deal(undefined, mode === 'joker');
     }
     if (document.getElementById('arrangement').value === 'sorted') cards.sort(byRank);
     solution = Houseway.solve(cards);
