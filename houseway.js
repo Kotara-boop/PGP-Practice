@@ -349,11 +349,86 @@
     }
   }
 
+  // All 5-card straight/flush/SF sets in a 53-card deck, computed once at load.
+  // Generated combinatorially (straights by rank sequence, flushes by suit)
+  // rather than by brute-forcing all C(53,5) subsets.
+  const SF5_SETS = (() => {
+    const deck = newDeck();
+    const byRankSuit = new Map(deck.map(c => [c.rank + c.suit, c]));
+    const sets = [];
+    const seen = new Set();
+    const add = (cards) => {
+      const key = cards.map(c => c.id).sort().join();
+      if (!seen.has(key)) { seen.add(key); sets.push(cards); }
+    };
+    // Straights: 10 rank sequences (A-5 up to 10-A), any suits.
+    for (let start = 1; start <= 10; start++) {
+      const ranks = Array.from({ length: 5 }, (_, i) => start + i).map(r => r === 1 ? 14 : r);
+      // 4^5 suit assignments
+      const suitIdx = [0, 0, 0, 0, 0];
+      for (;;) {
+        add(ranks.map((r, i) => byRankSuit.get(r + SUITS[suitIdx[i]])));
+        let k = 4;
+        while (k >= 0 && ++suitIdx[k] === 4) suitIdx[k--] = 0;
+        if (k < 0) break;
+      }
+    }
+    // Flushes: C(13,5) rank subsets per suit.
+    for (const s of SUITS) {
+      for (const idxs of combos(13, 5)) {
+        add(idxs.map(i => byRankSuit.get((i + 2) + s)));
+      }
+    }
+    return sets;
+  })();
+
   // Ace-exception practice: only hands that land in the Straight/Flush with One
-  // Pair (Ace + big pair exception) category — some use the exception, some
-  // fall back to the default Ace-low/pair-high play.
+  // Pair (Ace + big pair exception) category. Balanced across the three plays:
+  // 40% default (Ace low, pair high — no exception split keeps the
+  // straight/flush), 30% Ace-low exception, 30% pair-low exception.
+  // Hands are built around a random 5-card straight/flush/SF set, then verified
+  // with the solver as a safety net.
   function dealAceException(rnd = Math.random) {
-    return dealUntil(rnd, c => c === SF_ACE_EXCEPTION);
+    const playOf = (hand) => {
+      const res = solve(hand);
+      if (res.category !== SF_ACE_EXCEPTION) return null;
+      const d = describeSplit(hand, res.splits[0]);
+      const lowRanks = d.low.map(c => c.rank);
+      if (lowRanks[0] === lowRanks[1] && lowRanks[0] >= 10 && lowRanks[0] <= 13) return 'pairLow';
+      return isSF5(d.high) ? 'aceLow' : 'default';
+    };
+    const roll = rnd();
+    const want = roll < 0.4 ? 'default' : roll < 0.7 ? 'aceLow' : 'pairLow';
+    // SF5_SETS holds card objects from a single reference deck; match by id.
+    const has = (set, card) => set.some(c => c.id === card.id);
+    for (;;) {
+      const deck = newDeck();
+      const pairRank = 10 + Math.floor(rnd() * 4); // 10, J, Q, K
+      const pair = shuffle(deck.filter(c => c.rank === pairRank), rnd).slice(0, 2);
+      const ace = deck.find(c => c.rank === 14 && c.suit !== pair[0].suit && c.suit !== pair[1].suit);
+      let hand;
+      if (want === 'pairLow') {
+        // High hand is a straight/flush/SF containing the Ace but neither pair card.
+        const opts = SF5_SETS.filter(s => has(s, ace) && !pair.some(c => has(s, c)));
+        if (!opts.length) continue;
+        const high = opts[Math.floor(rnd() * opts.length)];
+        hand = pair.concat(high);
+      } else if (want === 'aceLow') {
+        // High hand is a straight/flush/SF containing one pair card but not the
+        // Ace; the other pair card is the second low card alongside the Ace.
+        const opts = SF5_SETS.filter(s => has(s, pair[0]) && !has(s, ace));
+        if (!opts.length) continue;
+        const high = opts[Math.floor(rnd() * opts.length)];
+        hand = [ace, pair[1]].concat(high);
+      } else {
+        // Default: a straight/flush/SF exists somewhere, but no split with the
+        // Ace or the pair in the low hand keeps it complete.
+        const rest = shuffle(deck.filter(c => c !== ace && !pair.includes(c)), rnd);
+        hand = [ace].concat(pair, rest.slice(0, 4));
+        if (!sfPossible(hand)) continue;
+      }
+      if (playOf(hand) === want) return shuffle(hand, rnd);
+    }
   }
 
   // Five Aces = four Aces + Joker; "with Kings" means the other two cards are a pair of Kings.
