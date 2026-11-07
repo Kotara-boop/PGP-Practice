@@ -233,7 +233,7 @@
         const c = best(valid.filter(([i, j]) =>
           [i, j].some(k => !cards[k].joker && cards[k].rank === 14) ||
           [i, j].every(k => !cards[k].joker && cards[k].rank === p)));
-        const rule = 'With an Ace and a pair of Kings/Queens/Jacks/Tens: Ace low and pair high, unless you can place the Ace or the pair in the low hand and keep the complete straight/flush/straight flush high.';
+        const rule = 'With an Ace and a pair of Kings/Queens/Jacks/Tens: Ace low and pair high, unless you can place Ace-high or better in the low hand and keep the complete straight/flush/straight flush high.';
         if (c.length) return { category: 'Straight/Flush with One Pair (Ace + big pair exception)', rule, splits: c };
         const others = cards.map((c, idx) => ({ v: rv(c, 14), idx, nat: !c.joker && c.rank === p }))
           .filter(x => !x.nat).map(x => x.v);
