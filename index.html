@@ -45,6 +45,14 @@
               border: 1px solid rgba(240, 171, 252, 0.2); line-height: 1.6; display: none; }
   #feedback.good { border-color: rgba(34, 197, 94, 0.5); color: #bbf7d0; }
   #feedback.bad { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
+  #calculator-area { display: none; }
+  .calculator-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+  .calculator-card { display: grid; gap: 6px; color: #f5d0fe; font-weight: 600; }
+  .calculator-card input { min-width: 0; width: 100%; border: none; border-radius: 999px; padding: 10px 16px;
+                          font-size: .95rem; font-weight: 600; background: rgba(112, 26, 117, 0.85); color: #fdf4ff; }
+  #calculator-status { min-height: 1.5em; color: #f5d0fe; }
+  #calculator-result { margin: 16px 0; padding: 14px 16px; border-radius: 16px; background: rgba(24, 4, 32, 0.68);
+                      border: 1px solid rgba(240, 171, 252, 0.2); line-height: 1.6; display: none; }
   details { margin-top: 20px; background: rgba(24, 4, 32, 0.5); border: 1px solid rgba(240, 171, 252, 0.2); padding: 12px 16px; border-radius: 16px; }
   summary { cursor: pointer; font-weight: 600; }
   details li { margin: 4px 0; color: #f5d0fe; }
@@ -67,14 +75,15 @@
   <span class="mode-label">Practice:</span>
   <button id="mode-houseway" class="mode-btn active">Houseway</button>
   <button id="mode-winner" class="mode-btn">Winner Prediction</button>
+  <button id="mode-calculator" class="mode-btn">Houseway Calculator</button>
 </div>
+<div id="game-area">
 <div class="mode-controls" id="category-row">
   <label class="mode-label" for="mode">Category</label>
   <select id="mode">
     <option value="normal">Normal (random 7 cards)</option>
     <option value="joker">Joker Hands (always includes the Joker)</option>
     <option value="exceptions">Exceptions Practice</option>
-    <option value="ace-exception">Ace Exception</option>
   </select>
 </div>
 <div class="mode-controls">
@@ -102,6 +111,14 @@
   <button id="next" style="display:none">Next Hand ▶</button>
 </div>
 <div id="feedback"></div>
+</div>
+<div id="calculator-area">
+  <p>Enter each card as rank then suit (for example, Ac or 10h). Use h for Hearts, d for Diamonds, s for Spades, and c for Clubs. Type jok or joker for the Joker.</p>
+  <div id="calculator-inputs" class="calculator-inputs"></div>
+  <p id="calculator-status" aria-live="polite">Choose 7 different cards.</p>
+  <button id="calculate-houseway" disabled>Calculate Houseway</button>
+  <div id="calculator-result" aria-live="polite"></div>
+</div>
 <details>
   <summary>Houseway rules reference</summary>
   <ul>
@@ -161,6 +178,12 @@
   const submitBtn = document.getElementById('submit');
   const nextBtn = document.getElementById('next');
   const fb = document.getElementById('feedback');
+  const gameArea = document.getElementById('game-area');
+  const calculatorArea = document.getElementById('calculator-area');
+  const calculatorInputs = document.getElementById('calculator-inputs');
+  const calculatorStatus = document.getElementById('calculator-status');
+  const calculateHousewayBtn = document.getElementById('calculate-houseway');
+  const calculatorResult = document.getElementById('calculator-result');
   const statsEl = document.getElementById('stats');
   const subEl = document.getElementById('sub');
   const playerArea = document.getElementById('player-area');
@@ -175,24 +198,33 @@
   const byRank = (a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit);
   const SUBS = {
     winner: 'Set the dealer\'s hand by houseway (pick the <b>two cards</b> for the dealer\'s Low Hand), then predict the result. Copies go to the dealer; if the player\'s Low Hand outranks the High Hand, the player fouls and loses.',
-    house: 'Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.'
+    house: 'Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.',
+    calculator: 'Enter any 7-card hand to see the houseway setup.'
   };
   const OUTCOME_NAMES = { win: 'Player Wins', push: 'Push', lose: 'Player Loses', foul: 'Player Fouls' };
   const modeSelect = document.getElementById('mode');
   const categoryRow = document.getElementById('category-row');
-  const modeBtns = { houseway: document.getElementById('mode-houseway'), winner: document.getElementById('mode-winner') };
+  const modeBtns = {
+    houseway: document.getElementById('mode-houseway'),
+    winner: document.getElementById('mode-winner'),
+    calculator: document.getElementById('mode-calculator')
+  };
   let modeCategory = 'houseway';
   const winnerMode = () => modeCategory === 'winner';
+  const calculatorMode = () => modeCategory === 'calculator';
 
   function setModeCategory(cat) {
     modeCategory = cat;
-    modeBtns.houseway.classList.toggle('active', cat === 'houseway');
-    modeBtns.winner.classList.toggle('active', cat === 'winner');
+    Object.entries(modeBtns).forEach(([name, button]) => button.classList.toggle('active', cat === name));
     categoryRow.style.display = cat === 'houseway' ? '' : 'none';
-    newHand();
+    gameArea.style.display = calculatorMode() ? 'none' : '';
+    calculatorArea.style.display = calculatorMode() ? 'block' : 'none';
+    subEl.innerHTML = calculatorMode() ? SUBS.calculator : winnerMode() ? SUBS.winner : SUBS.house;
+    if (!calculatorMode()) newHand();
   }
   modeBtns.houseway.onclick = () => setModeCategory('houseway');
   modeBtns.winner.onclick = () => setModeCategory('winner');
+  modeBtns.calculator.onclick = () => setModeCategory('calculator');
 
   function cardEl(c, clickable) {
     const d = document.createElement('div');
@@ -207,6 +239,90 @@
     return w;
   }
 
+  function updateCalculatorStatus() {
+    const entries = [...calculatorInputs.querySelectorAll('input')].map(input => ({
+      input,
+      value: input.value.trim(),
+      card: parseCalculatorCard(input.value)
+    }));
+    const invalid = entries.filter(entry => entry.value && !entry.card);
+    const cardCounts = new Map();
+    entries.forEach(entry => {
+      if (entry.card) cardCounts.set(entry.card.id, (cardCounts.get(entry.card.id) || 0) + 1);
+    });
+    const duplicates = entries.filter(entry => entry.card && cardCounts.get(entry.card.id) > 1);
+    const missing = entries.filter(entry => !entry.value);
+    const ready = !invalid.length && !duplicates.length && !missing.length;
+    calculatorStatus.textContent = invalid.length
+      ? `Invalid ${invalid.map(entry => entry.input.getAttribute('aria-label')).join(', ')}. Use Ac, 10h, jok, or joker.`
+      : duplicates.length
+        ? `Duplicate card: ${[...new Set(duplicates.map(entry => entry.value))].join(', ')}.`
+        : ready
+          ? 'Ready to calculate.'
+          : `Enter ${missing.length} more card${missing.length === 1 ? '' : 's'}.`;
+    calculateHousewayBtn.disabled = !ready;
+    calculatorResult.style.display = 'none';
+    calculatorResult.innerHTML = '';
+  }
+
+  function parseCalculatorCard(value) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'jok' || normalized === 'joker') return { id: 'JK' };
+    const match = normalized.match(/^(10|[2-9]|[ajqk])([hdsc])$/);
+    if (!match) return null;
+    const rank = ({ a: 14, j: 11, q: 12, k: 13 })[match[1]] || Number(match[1]);
+    return { id: `${rank}${match[2].toUpperCase()}` };
+  }
+
+  function setupCalculatorInputs() {
+    Array.from({ length: 7 }, (_, index) => index).forEach(index => {
+      const label = document.createElement('label');
+      label.className = 'calculator-card';
+      label.htmlFor = `calculator-card-${index}`;
+      label.textContent = `Card ${index + 1}`;
+
+      const input = document.createElement('input');
+      input.id = label.htmlFor;
+      input.type = 'text';
+      input.placeholder = 'e.g. Ac';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.setAttribute('aria-label', label.textContent);
+      input.addEventListener('input', updateCalculatorStatus);
+      label.appendChild(input);
+      calculatorInputs.appendChild(label);
+    });
+  }
+
+  function calculateHouseway() {
+    const deck = Houseway.newDeck();
+    const parsedCards = [...calculatorInputs.querySelectorAll('input')].map(input => parseCalculatorCard(input.value));
+    if (parsedCards.length !== 7 || parsedCards.some(card => !card) || new Set(parsedCards.map(card => card.id)).size !== 7) {
+      updateCalculatorStatus();
+      return;
+    }
+
+    const cardsById = new Map(deck.map(card => [card.id, card]));
+    const hand = parsedCards.map(card => cardsById.get(card.id));
+    const result = Houseway.solve(hand);
+    const split = Houseway.describeSplit(hand, result.splits[0]);
+    calculatorResult.innerHTML = '';
+    const summary = document.createElement('div');
+    summary.innerHTML = `<b>Hand type:</b> ${result.category}<br><b>Rule:</b> ${result.rule}`;
+    if (result.jokerNote) {
+      summary.insertAdjacentHTML('beforeend', `<br><b>Joker:</b> ${result.jokerNote} <i>(${Houseway.jokerRole(hand, result.splits[0])})</i>`);
+    }
+    calculatorResult.appendChild(summary);
+    calculatorResult.appendChild(document.createElement('br'));
+    calculatorResult.appendChild(Object.assign(document.createElement('b'), { textContent: 'Low hand: ' }));
+    calculatorResult.appendChild(miniRow(Houseway.sortForDisplay(split.low)));
+    calculatorResult.appendChild(document.createElement('br'));
+    calculatorResult.appendChild(Object.assign(document.createElement('b'), { textContent: 'High hand: ' }));
+    calculatorResult.appendChild(miniRow(Houseway.sortForDisplay(split.high)));
+    calculatorResult.style.display = 'block';
+    calculatorStatus.textContent = 'Houseway calculated.';
+  }
+
   function newHand() {
     const mode = modeSelect.value;
     const wm = winnerMode();
@@ -217,7 +333,6 @@
       playerLow = round.player.low;
     } else {
       cards = mode === 'exceptions' ? Houseway.dealException()
-        : mode === 'ace-exception' ? Houseway.dealAceException()
         : Houseway.deal(undefined, mode === 'joker');
     }
     if (document.getElementById('arrangement').value === 'sorted') cards.sort(byRank);
@@ -308,6 +423,8 @@
     render();
   });
   nextBtn.onclick = newHand;
+  calculateHousewayBtn.onclick = calculateHouseway;
+  setupCalculatorInputs();
   modeSelect.onchange = newHand;
   document.getElementById('arrangement').onchange = newHand;
   newHand();

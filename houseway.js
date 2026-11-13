@@ -349,104 +349,6 @@
     }
   }
 
-  // All 5-card straight/flush/SF sets in a 53-card deck, computed once at load.
-  // Generated combinatorially (straights by rank sequence, flushes by suit)
-  // rather than by brute-forcing all C(53,5) subsets.
-  const SF5_SETS = (() => {
-    const deck = newDeck();
-    const byRankSuit = new Map(deck.map(c => [c.rank + c.suit, c]));
-    const sets = [];
-    const seen = new Set();
-    const add = (cards) => {
-      const key = cards.map(c => c.id).sort().join();
-      if (!seen.has(key)) { seen.add(key); sets.push(cards); }
-    };
-    // Straights: 10 rank sequences (A-5 up to 10-A), any suits.
-    for (let start = 1; start <= 10; start++) {
-      const ranks = Array.from({ length: 5 }, (_, i) => start + i).map(r => r === 1 ? 14 : r);
-      // 4^5 suit assignments
-      const suitIdx = [0, 0, 0, 0, 0];
-      for (;;) {
-        add(ranks.map((r, i) => byRankSuit.get(r + SUITS[suitIdx[i]])));
-        let k = 4;
-        while (k >= 0 && ++suitIdx[k] === 4) suitIdx[k--] = 0;
-        if (k < 0) break;
-      }
-    }
-    // Flushes: C(13,5) rank subsets per suit.
-    for (const s of SUITS) {
-      for (const idxs of combos(13, 5)) {
-        add(idxs.map(i => byRankSuit.get((i + 2) + s)));
-      }
-    }
-    return sets;
-  })();
-
-  // Ace-exception practice: only hands that land in the Straight/Flush with One
-  // Pair (Ace + big pair exception) category. Mix: 30% default (Ace low, pair
-  // high — no exception split keeps the straight/flush), 30% Ace-low exception,
-  // 20% pair-low exception, 20% 6-card flushes. A 6-card flush with an Ace and
-  // a pair can only be built one way (the off-suit card is one pair card), so
-  // both exception splits keep a flush and the better-low rule plays pair-low.
-  // Hands are built around a random 5-card straight/flush/SF set, then verified
-  // with the solver as a safety net.
-  function dealAceException(rnd = Math.random) {
-    const playOf = (hand) => {
-      const res = solve(hand);
-      if (res.category !== SF_ACE_EXCEPTION) return null;
-      const suitCounts = {};
-      hand.forEach(c => { if (!c.joker) suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1; });
-      if (Math.max(...Object.values(suitCounts)) >= 6) return 'sixFlush';
-      const d = describeSplit(hand, res.splits[0]);
-      const lowRanks = d.low.map(c => c.rank);
-      if (lowRanks[0] === lowRanks[1] && lowRanks[0] >= 10 && lowRanks[0] <= 13) return 'pairLow';
-      return isSF5(d.high) ? 'aceLow' : 'default';
-    };
-    const roll = rnd();
-    const want = roll < 0.3 ? 'default' : roll < 0.6 ? 'aceLow' : roll < 0.8 ? 'pairLow' : 'sixFlush';
-    // SF5_SETS holds card objects from a single reference deck; match by id.
-    const has = (set, card) => set.some(c => c.id === card.id);
-    for (;;) {
-      const deck = newDeck();
-      const pairRank = 10 + Math.floor(rnd() * 4); // 10, J, Q, K
-      const pair = shuffle(deck.filter(c => c.rank === pairRank), rnd).slice(0, 2);
-      const ace = deck.find(c => c.rank === 14 && c.suit !== pair[0].suit && c.suit !== pair[1].suit);
-      let hand;
-      if (want === 'pairLow') {
-        // High hand is a straight/flush/SF containing the Ace but neither pair card.
-        const opts = SF5_SETS.filter(s => has(s, ace) && !pair.some(c => has(s, c)));
-        if (!opts.length) continue;
-        const high = opts[Math.floor(rnd() * opts.length)];
-        hand = pair.concat(high);
-      } else if (want === 'aceLow') {
-        // High hand is a straight/flush/SF containing one pair card but not the
-        // Ace; the other pair card is the second low card alongside the Ace.
-        const opts = SF5_SETS.filter(s => has(s, pair[0]) && !has(s, ace));
-        if (!opts.length) continue;
-        const high = opts[Math.floor(rnd() * opts.length)];
-        hand = [ace, pair[1]].concat(high);
-      } else if (want === 'sixFlush') {
-        // 6-card flush: the off-suit card is one pair card; the 6 suited cards
-        // are the Ace, the other pair card, and 4 others.
-        const suit = SUITS[Math.floor(rnd() * 4)];
-        const offSuit = SUITS.filter(s => s !== suit)[Math.floor(rnd() * 3)];
-        const others = shuffle(deck.filter(c => c.suit === suit && c.rank !== 14 && c.rank !== pairRank), rnd).slice(0, 4);
-        hand = [
-          deck.find(c => c.rank === pairRank && c.suit === offSuit),
-          deck.find(c => c.rank === 14 && c.suit === suit),
-          deck.find(c => c.rank === pairRank && c.suit === suit)
-        ].concat(others);
-      } else {
-        // Default: a straight/flush/SF exists somewhere, but no split with the
-        // Ace or the pair in the low hand keeps it complete.
-        const rest = shuffle(deck.filter(c => c !== ace && !pair.includes(c)), rnd);
-        hand = [ace].concat(pair, rest.slice(0, 4));
-        if (!sfPossible(hand)) continue;
-      }
-      if (playOf(hand) === want) return shuffle(hand, rnd);
-    }
-  }
-
   // Five Aces = four Aces + Joker; "with Kings" means the other two cards are a pair of Kings.
   function dealFiveAces(rnd, withKings) {
     const deck = newDeck();
@@ -614,7 +516,7 @@
     };
   }
 
-  const api = { dealException, dealAceException, dealWinner, winnerOutcome, eval5, eval2, name5, name2, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
+  const api = { dealException, dealWinner, winnerOutcome, eval5, eval2, name5, name2, jokerRole, newDeck, shuffle, deal, solve, isSF5, sfPossible, describeSplit, sortForDisplay, RANK_NAMES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Houseway = api;
 })(typeof window !== 'undefined' ? window : globalThis);
