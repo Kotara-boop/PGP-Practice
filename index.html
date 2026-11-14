@@ -46,10 +46,12 @@
   #feedback.good { border-color: rgba(34, 197, 94, 0.5); color: #bbf7d0; }
   #feedback.bad { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
   #calculator-area { display: none; }
-  .calculator-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+  .calculator-inputs { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
   .calculator-card { display: grid; gap: 6px; color: #f5d0fe; font-weight: 600; }
-  .calculator-card input { min-width: 0; width: 100%; border: none; border-radius: 999px; padding: 10px 16px;
-                          font-size: .95rem; font-weight: 600; background: rgba(112, 26, 117, 0.85); color: #fdf4ff; }
+  #calculator-joker[aria-pressed="true"] { outline: 2px solid #f5d0fe; }
+  #calculator-pool { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+  .calculator-pool-card { display: grid; justify-items: center; gap: 4px; }
+  .calculator-pool-card button { padding: 6px 10px; margin: 0; font-size: .8rem; }
   #calculator-status { min-height: 1.5em; color: #f5d0fe; }
   #calculator-result { margin: 16px 0; padding: 14px 16px; border-radius: 16px; background: rgba(24, 4, 32, 0.68);
                       border: 1px solid rgba(240, 171, 252, 0.2); line-height: 1.6; display: none; }
@@ -113,9 +115,41 @@
 <div id="feedback"></div>
 </div>
 <div id="calculator-area">
-  <p>Enter each card as rank then suit (for example, Ac or 10h). Use h for Hearts, d for Diamonds, s for Spades, and c for Clubs. Type jok or joker for the Joker.</p>
-  <div id="calculator-inputs" class="calculator-inputs"></div>
-  <p id="calculator-status" aria-live="polite">Choose 7 different cards.</p>
+  <p>Select a rank and suit, then add the card to your pool. Toggle the Joker on or off to add or remove it. Choose 7 different cards.</p>
+  <div class="calculator-inputs">
+    <label class="calculator-card" for="calculator-rank">Rank
+      <select id="calculator-rank">
+        <option value="">Select rank</option>
+        <option value="14">Ace</option>
+        <option value="13">King</option>
+        <option value="12">Queen</option>
+        <option value="11">Jack</option>
+        <option value="10">10</option>
+        <option value="9">9</option>
+        <option value="8">8</option>
+        <option value="7">7</option>
+        <option value="6">6</option>
+        <option value="5">5</option>
+        <option value="4">4</option>
+        <option value="3">3</option>
+        <option value="2">2</option>
+      </select>
+    </label>
+    <label class="calculator-card" for="calculator-suit">Suit
+      <select id="calculator-suit">
+        <option value="">Select suit</option>
+        <option value="S">Spades</option>
+        <option value="H">Hearts</option>
+        <option value="D">Diamonds</option>
+        <option value="C">Clubs</option>
+      </select>
+    </label>
+    <button id="calculator-add" type="button" disabled>Add Card</button>
+    <button id="calculator-joker" type="button" aria-pressed="false">Joker: Off</button>
+  </div>
+  <div id="calculator-pool" aria-label="Selected cards"></div>
+  <p id="calculator-status" aria-live="polite">Add 7 more cards.</p>
+  <button id="calculator-clear" type="button" disabled>Clear Cards</button>
   <button id="calculate-houseway" disabled>Calculate Houseway</button>
   <div id="calculator-result" aria-live="polite"></div>
 </div>
@@ -180,7 +214,12 @@
   const fb = document.getElementById('feedback');
   const gameArea = document.getElementById('game-area');
   const calculatorArea = document.getElementById('calculator-area');
-  const calculatorInputs = document.getElementById('calculator-inputs');
+  const calculatorRank = document.getElementById('calculator-rank');
+  const calculatorSuit = document.getElementById('calculator-suit');
+  const calculatorAdd = document.getElementById('calculator-add');
+  const calculatorJoker = document.getElementById('calculator-joker');
+  const calculatorClear = document.getElementById('calculator-clear');
+  const calculatorPool = document.getElementById('calculator-pool');
   const calculatorStatus = document.getElementById('calculator-status');
   const calculateHousewayBtn = document.getElementById('calculate-houseway');
   const calculatorResult = document.getElementById('calculator-result');
@@ -199,7 +238,7 @@
   const SUBS = {
     winner: 'Set the dealer\'s hand by houseway (pick the <b>two cards</b> for the dealer\'s Low Hand), then predict the result. Copies go to the dealer; if the player\'s Low Hand outranks the High Hand, the player fouls and loses.',
     house: 'Pick the <b>two cards</b> that go in the <b>Low Hand</b>. The Joker completes a Straight/Flush/Straight Flush if possible; otherwise it is an Ace.',
-    calculator: 'Enter any 7-card hand to see the houseway setup.'
+    calculator: 'Select any 7-card hand to see the houseway setup.'
   };
   const OUTCOME_NAMES = { win: 'Player Wins', push: 'Push', lose: 'Player Loses', foul: 'Player Fouls' };
   const modeSelect = document.getElementById('mode');
@@ -239,71 +278,72 @@
     return w;
   }
 
-  function updateCalculatorStatus() {
-    const entries = [...calculatorInputs.querySelectorAll('input')].map(input => ({
-      input,
-      value: input.value.trim(),
-      card: parseCalculatorCard(input.value)
-    }));
-    const invalid = entries.filter(entry => entry.value && !entry.card);
-    const cardCounts = new Map();
-    entries.forEach(entry => {
-      if (entry.card) cardCounts.set(entry.card.id, (cardCounts.get(entry.card.id) || 0) + 1);
+  const calculatorDeck = new Map(Houseway.newDeck().map(card => [card.id, card]));
+  let calculatorCards = [];
+
+  function selectedCalculatorCard() {
+    const rank = calculatorRank.value;
+    const id = rank && calculatorSuit.value ? rank + calculatorSuit.value : '';
+    return calculatorDeck.get(id);
+  }
+
+  function updateCalculatorSelection() {
+    const card = selectedCalculatorCard();
+    const duplicate = card && calculatorCards.some(selected => selected.id === card.id);
+    calculatorAdd.disabled = calculatorCards.length === 7 || !card || duplicate;
+    if (duplicate) {
+      calculatorStatus.textContent = 'That card is already in the pool.';
+    } else {
+      const missing = 7 - calculatorCards.length;
+      calculatorStatus.textContent = missing ? `Add ${missing} more card${missing === 1 ? '' : 's'}.` : 'Ready to calculate.';
+    }
+  }
+
+  function updateCalculatorPool() {
+    calculatorPool.innerHTML = '';
+    calculatorCards.forEach(card => {
+      const item = document.createElement('div');
+      item.className = 'calculator-pool-card';
+      item.appendChild(miniRow([card]));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'Remove';
+      const name = card.joker ? 'Joker' : `${Houseway.RANK_NAMES[card.rank]} of ${{ S: 'Spades', H: 'Hearts', D: 'Diamonds', C: 'Clubs' }[card.suit]}`;
+      remove.setAttribute('aria-label', `Remove ${name}`);
+      remove.onclick = () => {
+        calculatorCards = calculatorCards.filter(selected => selected.id !== card.id);
+        updateCalculatorPool();
+      };
+      item.appendChild(remove);
+      calculatorPool.appendChild(item);
     });
-    const duplicates = entries.filter(entry => entry.card && cardCounts.get(entry.card.id) > 1);
-    const missing = entries.filter(entry => !entry.value);
-    const ready = !invalid.length && !duplicates.length && !missing.length;
-    calculatorStatus.textContent = invalid.length
-      ? `Invalid ${invalid.map(entry => entry.input.getAttribute('aria-label')).join(', ')}. Use Ac, 10h, jok, or joker.`
-      : duplicates.length
-        ? `Duplicate card: ${[...new Set(duplicates.map(entry => entry.value))].join(', ')}.`
-        : ready
-          ? 'Ready to calculate.'
-          : `Enter ${missing.length} more card${missing.length === 1 ? '' : 's'}.`;
-    calculateHousewayBtn.disabled = !ready;
+    calculatorClear.disabled = calculatorCards.length === 0;
+    const hasJoker = calculatorCards.some(card => card.joker);
+    calculatorJoker.setAttribute('aria-pressed', String(hasJoker));
+    calculatorJoker.textContent = `Joker: ${hasJoker ? 'On' : 'Off'}`;
+    calculatorJoker.disabled = !hasJoker && calculatorCards.length === 7;
+    calculateHousewayBtn.disabled = calculatorCards.length !== 7;
     calculatorResult.style.display = 'none';
     calculatorResult.innerHTML = '';
+    updateCalculatorSelection();
   }
 
-  function parseCalculatorCard(value) {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'jok' || normalized === 'joker') return { id: 'JK' };
-    const match = normalized.match(/^(10|[2-9]|[ajqk])([hdsc])$/);
-    if (!match) return null;
-    const rank = ({ a: 14, j: 11, q: 12, k: 13 })[match[1]] || Number(match[1]);
-    return { id: `${rank}${match[2].toUpperCase()}` };
-  }
-
-  function setupCalculatorInputs() {
-    Array.from({ length: 7 }, (_, index) => index).forEach(index => {
-      const label = document.createElement('label');
-      label.className = 'calculator-card';
-      label.htmlFor = `calculator-card-${index}`;
-      label.textContent = `Card ${index + 1}`;
-
-      const input = document.createElement('input');
-      input.id = label.htmlFor;
-      input.type = 'text';
-      input.placeholder = 'e.g. Ac';
-      input.autocomplete = 'off';
-      input.spellcheck = false;
-      input.setAttribute('aria-label', label.textContent);
-      input.addEventListener('input', updateCalculatorStatus);
-      label.appendChild(input);
-      calculatorInputs.appendChild(label);
-    });
+  function addCalculatorCard() {
+    const card = selectedCalculatorCard();
+    if (!card || calculatorCards.length === 7 || calculatorCards.some(selected => selected.id === card.id)) return;
+    calculatorCards.push(card);
+    calculatorRank.value = '';
+    calculatorSuit.value = '';
+    updateCalculatorPool();
   }
 
   function calculateHouseway() {
-    const deck = Houseway.newDeck();
-    const parsedCards = [...calculatorInputs.querySelectorAll('input')].map(input => parseCalculatorCard(input.value));
-    if (parsedCards.length !== 7 || parsedCards.some(card => !card) || new Set(parsedCards.map(card => card.id)).size !== 7) {
-      updateCalculatorStatus();
+    if (calculatorCards.length !== 7) {
+      updateCalculatorSelection();
       return;
     }
 
-    const cardsById = new Map(deck.map(card => [card.id, card]));
-    const hand = parsedCards.map(card => cardsById.get(card.id));
+    const hand = calculatorCards;
     const result = Houseway.solve(hand);
     const split = Houseway.describeSplit(hand, result.splits[0]);
     calculatorResult.innerHTML = '';
@@ -424,7 +464,21 @@
   });
   nextBtn.onclick = newHand;
   calculateHousewayBtn.onclick = calculateHouseway;
-  setupCalculatorInputs();
+  calculatorRank.onchange = updateCalculatorSelection;
+  calculatorSuit.onchange = updateCalculatorSelection;
+  calculatorAdd.onclick = addCalculatorCard;
+  calculatorJoker.onclick = () => {
+    if (calculatorCards.some(card => card.joker)) {
+      calculatorCards = calculatorCards.filter(card => !card.joker);
+    } else if (calculatorCards.length < 7) {
+      calculatorCards.push(calculatorDeck.get('JK'));
+    }
+    updateCalculatorPool();
+  };
+  calculatorClear.onclick = () => {
+    calculatorCards = [];
+    updateCalculatorPool();
+  };
   modeSelect.onchange = newHand;
   document.getElementById('arrangement').onchange = newHand;
   newHand();
