@@ -19,7 +19,7 @@
   select { border: none; border-radius: 999px; padding: 10px 16px; font-size: .95rem; font-weight: 600;
            background: rgba(112, 26, 117, 0.85); color: #fdf4ff; cursor: pointer; }
   #stats { padding: 14px 16px; border-radius: 16px; margin-bottom: 16px; background: rgba(24, 4, 32, 0.68);
-           border: 1px solid rgba(240, 171, 252, 0.2); }
+           border: 1px solid rgba(240, 171, 252, 0.2); white-space: pre-wrap; }
   #hand { display: flex; gap: 10px; justify-content: center; margin: 20px 0; }
   .card { position: relative; flex: 0 1 96px; min-width: 0; aspect-ratio: 0.72 / 1; border: 1px solid #d1d5db; border-radius: 18px;
           background: linear-gradient(145deg, #ffffff 0%, #fef3c7 100%); color: #0f172a;
@@ -203,6 +203,7 @@
   <p><b>Note 1:</b> when more than one (straight/flush/straight flush) is possible, play whichever leaves the better low hand; if two splits leave an identical low hand, prefer the stronger high hand (straight flush &gt; flush &gt; straight).</p>
   <p><b>Note 2 (Joker foul rule):</b> if using the Joker to complete a straight/flush/straight flush will make the low hand outrank the high hand, strike out that possibility for the Joker (the Joker cannot play that card), and re-evaluate the hand from the top.</p>
   <p><b>Winner Prediction:</b> the player must beat both of the dealer's hands to win; one each is a push; copies (exact ties) go to the dealer. If the player's Low Hand outranks the High Hand, the player fouls and loses automatically.</p>
+  <p><b>Timing:</b> each hand is timed from the deal to your submission. Averages include only submitted hands, excluding the initial hand and the first hand after switching practice modes or changing card arrangement. Averages are separate for each practice mode and reset when the page is reloaded.</p>
 </details>
 </section></main>
 <script src="houseway.js"></script>
@@ -233,6 +234,8 @@
   const outcomeBtns = [...winnerBtns.querySelectorAll('button')];
   let cards, sel, solution, answered, correct = 0, total = 0, streak = 0;
   let playerHigh, playerLow;
+  let handStartedAt, handTime = null, excludeHandTime = false;
+  const timeStats = { houseway: { total: 0, count: 0 }, winner: { total: 0, count: 0 } };
   const w = { rounds: 0, both: 0, houseway: 0, prediction: 0, streak: 0 };
   const byRank = (a, b) => (b.joker - a.joker) || b.rank - a.rank || a.suit.localeCompare(b.suit);
   const SUBS = {
@@ -253,13 +256,14 @@
   const calculatorMode = () => modeCategory === 'calculator';
 
   function setModeCategory(cat) {
+    const switchedMode = cat !== modeCategory;
     modeCategory = cat;
     Object.entries(modeBtns).forEach(([name, button]) => button.classList.toggle('active', cat === name));
     categoryRow.style.display = cat === 'houseway' ? '' : 'none';
     gameArea.style.display = calculatorMode() ? 'none' : '';
     calculatorArea.style.display = calculatorMode() ? 'block' : 'none';
     subEl.innerHTML = calculatorMode() ? SUBS.calculator : winnerMode() ? SUBS.winner : SUBS.house;
-    if (!calculatorMode()) newHand();
+    if (!calculatorMode()) newHand(switchedMode);
   }
   modeBtns.houseway.onclick = () => setModeCategory('houseway');
   modeBtns.winner.onclick = () => setModeCategory('winner');
@@ -363,7 +367,7 @@
     calculatorStatus.textContent = 'Houseway calculated.';
   }
 
-  function newHand() {
+  function newHand(excludeFromAverage = false) {
     const mode = modeSelect.value;
     const wm = winnerMode();
     if (wm) {
@@ -377,7 +381,7 @@
     }
     if (document.getElementById('arrangement').value === 'sorted') cards.sort(byRank);
     solution = Houseway.solve(cards);
-    sel = []; answered = false;
+    sel = []; answered = false; handTime = null; excludeHandTime = excludeFromAverage;
     fb.style.display = 'none'; nextBtn.style.display = 'none';
     subEl.innerHTML = wm ? SUBS.winner : SUBS.house;
     playerArea.style.display = wm ? '' : 'none';
@@ -391,6 +395,19 @@
       Houseway.sortForDisplay(playerLow).forEach(c => playerLowEl.appendChild(cardEl(c, false)));
     }
     render();
+    handStartedAt = performance.now();
+  }
+
+  function recordHandTime() {
+    handTime = performance.now() - handStartedAt;
+    if (!excludeHandTime) {
+      timeStats[modeCategory].total += handTime;
+      timeStats[modeCategory].count++;
+    }
+  }
+
+  function formatTime(ms) {
+    return ms === null ? '—' : `${(ms / 1000).toFixed(1)}s`;
   }
 
   function render() {
@@ -407,9 +424,12 @@
     });
     submitBtn.disabled = answered || sel.length !== 2;
     outcomeBtns.forEach(b => { b.disabled = answered || sel.length !== 2; });
-    statsEl.textContent = winnerMode()
+    const timing = timeStats[modeCategory];
+    const score = winnerMode()
       ? `Score: ${w.both}/${w.rounds}   Houseway: ${w.houseway}/${w.rounds}   Predictions: ${w.prediction}/${w.rounds}   Streak: ${w.streak}`
       : `Score: ${correct}/${total}   Streak: ${streak}`;
+    const excluded = handTime !== null && excludeHandTime ? ' (excluded from average)' : '';
+    statsEl.textContent = `${score}   This hand: ${formatTime(handTime)}${excluded}   Average time: ${formatTime(timing.count ? timing.total / timing.count : null)}`;
   }
 
   function same(a, b) { return a.length === b.length && a.every(x => b.includes(x)); }
@@ -425,6 +445,8 @@
   }
 
   submitBtn.onclick = () => {
+    if (answered || sel.length !== 2) return;
+    recordHandTime();
     answered = true; total++;
     const ok = solution.splits.some(s => same(s, sel));
     ok ? (correct++, streak++) : (streak = 0);
@@ -437,6 +459,8 @@
   };
 
   outcomeBtns.forEach(btn => btn.onclick = () => {
+    if (answered || sel.length !== 2) return;
+    recordHandTime();
     answered = true; w.rounds++;
     const pred = btn.dataset.outcome;
     const hwOK = solution.splits.some(s => same(s, sel));
@@ -462,7 +486,7 @@
     nextBtn.style.display = 'inline-block';
     render();
   });
-  nextBtn.onclick = newHand;
+  nextBtn.onclick = () => newHand();
   calculateHousewayBtn.onclick = calculateHouseway;
   calculatorRank.onchange = updateCalculatorSelection;
   calculatorSuit.onchange = updateCalculatorSelection;
@@ -479,9 +503,9 @@
     calculatorCards = [];
     updateCalculatorPool();
   };
-  modeSelect.onchange = newHand;
-  document.getElementById('arrangement').onchange = newHand;
-  newHand();
+  modeSelect.onchange = () => newHand();
+  document.getElementById('arrangement').onchange = () => newHand(true);
+  newHand(true);
 </script>
 <script type="module">
   import { inject } from 'https://cdn.jsdelivr.net/npm/@vercel/analytics@1/+esm';
